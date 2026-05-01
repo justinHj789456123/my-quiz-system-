@@ -1,65 +1,96 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工程品質專業測驗系統</title>
-    <style>
-        :root {
-            --primary-color: #2563eb;
-            --bg-color: #f8fafc;
-            --card-bg: #ffffff;
-        }
+import pandas as pd
+import random
+import os
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-color: var(--bg-color);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-        }
+class QuizMaster:
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.df = None
+        self.quiz_set = []
+        
+    def load_data(self):
+        """讀取 Excel 題庫檔案"""
+        try:
+            # 讀取指定的 Excel 檔案
+            self.df = pd.read_excel(self.file_path)
+            print(f"成功載入題庫，目前共有 {len(self.df)} 題。")
+            return True
+        except Exception as e:
+            print(f"錯誤：無法讀取檔案。{e}")
+            return False
 
-        .container {
-            background-color: var(--card-bg);
-            border-radius: 16px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            width: 100%;
-            max-width: 450px;
-            padding: 32px;
-            border: 1px solid #e2e8f0;
-        }
+    def setup_quiz(self):
+        """設定測驗範圍與數量"""
+        print("\n--- 測驗參數設定 ---")
+        try:
+            start_num = int(input(f"請輸入起始題號 (1-{len(self.df)}): "))
+            end_num = int(input(f"請輸入結束題號 ({start_num}-{len(self.df)}): "))
+            total_draw = int(input(f"請輸入欲抽考的總題數: "))
+            
+            # 根據範圍篩選題目[cite: 1]
+            pool = self.df[(self.df['序號'] >= start_num) & (self.df['序號'] <= end_num)]
+            
+            if len(pool) < total_draw:
+                print(f"警告：範圍內題目不足 {total_draw} 題，將改為全數抽測。")
+                total_draw = len(pool)
+            
+            # 隨機抽題並保持原文呈現
+            self.quiz_set = pool.sample(n=total_draw).to_dict('records')
+            
+            print(f"\n確認測驗範圍：第 {start_num} 題至第 {end_num} 題")
+            print(f"確認抽題數量：{total_draw} 題")
+            input("確認無誤請按 Enter 開始測驗...")
+            return True
+        except ValueError:
+            print("錯誤：請輸入正確的數字格式。")
+            return False
 
-        .header {
-            text-align: center;
-            margin-bottom: 24px;
-        }
+    def run_quiz(self):
+        """執行測驗流程"""
+        correct_count = 0
+        results = []
 
-        .header h1 {
-            color: #1e293b;
-            font-size: 24px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-        }
+        for i, q in enumerate(self.quiz_set, 1):
+            print("\n" + "="*30)
+            print(f"題號：{i}")
+            print(f"題目：{q['題目內容']}")  # 原文呈現[cite: 1]
+            print("選項：(A) (B) (C) (D)") # 根據題庫結構提供選項
+            
+            user_ans = input("您的回答 (A/B/C/D): ").strip().upper()
+            
+            # 核對正確答案[cite: 1]
+            if user_ans == str(q['正確答案']).strip().upper():
+                print("結果：正確")
+                correct_count += 1
+            else:
+                print(f"結果：錯誤 (正確答案為 {q['正確答案']})")
+            
+            results.append({
+                '題目': q['題目內容'],
+                '您的答案': user_ans,
+                '正確答案': q['正確答案']
+            })
 
-        .form-group {
-            margin-bottom: 20px;
-        }
+        self.show_final_report(correct_count, len(self.quiz_set))
 
-        label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #334155;
-            font-size: 15px;
-        }
+    def show_final_report(self, correct, total):
+        """統計測驗結果"""
+        print("\n" + "="*30)
+        print("測驗結束")
+        print(f"總答對題數：{correct} / {total}")
+        print(f"答對率：{(correct/total)*100:.2f}%")
+        print("="*30)
 
-        select, input {
-            width: 100%;
+# 執行程式
+if __name__ == "__main__":
+    file_name = "公共工程品質管理訓練班_機電班題庫.xlsx"
+    if os.path.exists(file_name):
+        master = QuizMaster(file_name)
+        if master.load_data():
+            if master.setup_quiz():
+                master.run_quiz()
+    else:
+        print(f"找不到檔案：{file_name}，請確認檔案放置於同一目錄下。")            width: 100%;
             padding: 12px;
             border: 1px solid #cbd5e1;
             border-radius: 8px;
