@@ -1,40 +1,88 @@
 import streamlit as st
 import pandas as pd
 
-# 設定網頁標題與風格
-st.set_page_config(page_title="工程品質專業測驗系統", layout="centered")
+st.set_page_config(page_title="數位考官 - 工程品質測驗", layout="centered")
 
 @st.cache_data
 def load_data():
     """高效讀取 2878 題大型題庫"""
     try:
+        # 修正讀取邏輯
         df = pd.read_excel("公共工程品質管理訓練班_機電班題庫.xlsx")
-        # 確保重要欄位格式正確
         df['序號'] = df['序號'].astype(int)
-        df['課程名稱'] = df['課程名稱'].astype(str).strip()
+        df['課程名稱'] = df['課程名稱'].astype(str).str.strip()
         return df
-    except Exception:
-        st.error("讀取失敗：請確認檔案『公共工程品質管理訓練班_機電班題庫.xlsx』已上傳至 GitHub 根目錄。")
+    except Exception as e:
+        # 當找不到檔案時會顯示此訊息
+        st.error(f"讀取失敗：請確認檔案『公共工程品質管理訓練班_機電班題庫.xlsx』已正確上傳至 GitHub。")
         return None
 
 def main():
     df = load_data()
     if df is None: return
 
-    # 1. 初始確認與範圍設定 (行為規則 1)
-    st.sidebar.header("⚙️ 數位考官參數設定")
+    # --- 行為規則 1：初始確認與範圍設定 ---
+    st.sidebar.header("⚙️ 測驗參數設定")
     
-    # 單元分類選擇 (新增功能)
+    # 單元分類 (自動依照題庫內容分類)
     all_units = sorted(df['課程名稱'].unique().tolist())
     selected_unit = st.sidebar.selectbox("1. 選擇測驗單元", ["【全部單元隨機抽】"] + all_units)
     
-    # 根據單元篩選題池
     pool = df if selected_unit == "【全部單元隨機抽】" else df[df['課程名稱'] == selected_unit]
     
-    # 設定範圍
+    # 題號區間
     min_id, max_id = int(pool['序號'].min()), int(pool['序號'].max())
-    st.sidebar.write(f"當前單元題號範圍：{min_id} ~ {max_id}")
+    st.sidebar.info(f"當前範圍可用題號：{min_id} ~ {max_id}")
     
+    start_num = st.sidebar.number_input("起始題號", min_id, max_id, min_id)
+    end_num = st.sidebar.number_input("結束題號", start_num, max_id, max_id)
+    
+    # 抽題數量
+    range_count = (end_num - start_num) + 1
+    total_draw = st.sidebar.number_input("想要抽考的總題數", 1, range_count, min(30, range_count))
+
+    if st.sidebar.button("確認範圍並開始測驗", use_container_width=True):
+        # --- 行為規則 2：隨機抽題與原文呈現 ---
+        target_pool = pool[(pool['序號'] >= start_num) & (pool['序號'] <= end_num)]
+        st.session_state.quiz_set = target_pool.sample(n=int(total_draw)).to_dict('records')
+        st.session_state.user_answers = {}
+        st.session_state.started = True
+        st.rerun()
+
+    # --- 測驗執行介面 ---
+    if st.session_state.get('started'):
+        st.title(f"🎓 數位考官：{selected_unit}")
+        st.write(f"本次抽測：{len(st.session_state.quiz_set)} 題")
+        
+        with st.form("quiz_form"):
+            for i, q in enumerate(st.session_state.quiz_set):
+                # 滿足顯示原題號需求
+                st.markdown(f"### 測驗題號：{i+1}")
+                st.markdown(f"**【原題庫序號：{q['序號']}】**")
+                st.write(f"題目：{q['題目內容']}") # 原文呈現
+                
+                st.session_state.user_answers[i] = st.radio(
+                    f"選擇答案 (Q{i+1})", ["A", "B", "C", "D"], key=f"q_{i}", index=None
+                )
+                st.write("---")
+            
+            # --- 行為規則 3：測驗流程管理 ---
+            if st.form_submit_button("交卷並核對答案", use_container_width=True):
+                correct = 0
+                for idx, q in enumerate(st.session_state.quiz_set):
+                    u_ans = st.session_state.user_answers.get(idx)
+                    if str(u_ans) == str(q['正確答案']).strip().upper():
+                        correct += 1
+                
+                st.success(f"測驗結束！總答對題數：{correct} / {len(st.session_state.quiz_set)}")
+                st.metric("正確率", f"{(correct/len(st.session_state.quiz_set))*100:.2f}%")
+        
+        if st.button("重新設定範圍"):
+            st.session_state.started = False
+            st.rerun()
+
+if __name__ == "__main__":
+    main()    
     start_num = st.sidebar.number_input("起始題號", min_id, max_id, min_id)
     end_num = st.sidebar.number_input("結束題號", start_num, max_id, max_id)
     
